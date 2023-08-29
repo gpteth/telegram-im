@@ -1,0 +1,247 @@
+一 关于基础服务配置安装
+
+0 按照 'chat服务器环境配置.txt' 搭建基础服务
+   注意安装 java 时，路径可能有变，当前路径如下
+   JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.352.b08-2.el7_9.x86_64/jre/
+
+iptables -I INPUT -p tcp --dport 80 -j ACCEPT
+iptables -I INPUT -p tcp --dport 81 -j ACCEPT
+iptables -I INPUT -p tcp --dport 443 -j ACCEPT
+
+
+1 安装 php73
+#安装 EPEL 源及源管理工具
+yum install epel-release yum-utils
+#安装 REMI 源：
+yum install http://rpms.remirepo.net/enterprise/remi-release-7.rpm
+#安装 PHP7.3 及扩展
+yum install -y php73-php-fpm php73-php-cli php73-php-bcmath php73-php-gd php73-php-json php73-php-mbstring php73-php-mcrypt php73-php-mysqlnd php73-php-opcache php73-php-pdo php73-php-pecl-crypto php73-php-pecl-mcrypt
+#查看版本
+php73 -v
+#开启开机自启
+systemctl enable php73-php-fpm 
+#启动
+systemctl start php73-php-fpm 
+
+#配置 php.ini 的 open_dir, 这里配置为实际项目路径
+vim /etc/opt/remi/php73/php.ini
+#改为
+open_basedir = "/work/bianyi/wwwroot/jk-im-com"  
+
+#配置 php-fpm 端口
+vim /etc/opt/remi/php73/php-fpm.d/www.conf
+#改为
+listen = 127.0.0.1:9001
+
+#修改配置后启动
+systemctl restart php73-php-fpm
+
+
+2 导入 mysql  
+# 进入 mysql
+mysql -uroot -p
+# 创建数据库 
+mysql>create databases imweb;
+mysql>create databases enterprise;
+mysql>create databases databus;
+# 导入 sql
+mysql>use imweb;
+# 注意这里的 sql 文件为具体的文件路径
+mysql>source imweb.sql;  
+mysql>use enterprise;
+mysql>source enterprise.sql;
+mysql>source update.sql;
+mysql>use databus;
+mysql>source databus.sql;
+
+# 去掉 mysql 的严格模式
+先执行select @@global.sql_mode,复制查询出来的值并将其中的,STRICT_TRANS_TABLESE删除，然后执行set global sql_mode = '修改后的值'。
+
+3 关于 nginx 
+用源码安装参考 https://blog.csdn.net/qq_33381971/article/details/123328191
+或直接 yum install nginx
+ 
+
+# 配置后台界面
+vim /etc/nginx/nginx.conf
+
+    server {
+        listen       81;
+        listen       [::]:81;
+        server_name  47.92.196.152;
+        root         /work/bianyi/wwwroot/admin.im.com;
+
+        gzip on;
+        gzip_min_length  1k;
+        gzip_buffers     4 16k;
+        gzip_http_version 1.1;
+        gzip_comp_level 2;
+        gzip_types     text/plain application/javascript application/x-javascript text/javascript text/css application/xml;
+        gzip_vary on;
+        gzip_proxied   expired no-cache no-store private auth;
+        gzip_disable   "MSIE [1-6]\.";
+
+        server_tokens off;
+        access_log off;
+
+
+        proxy_read_timeout 3600;
+        location /photo {
+            proxy_pass http://127.0.0.1;
+        }
+
+        location /api {
+            proxy_pass http://127.0.0.1;
+        }
+
+
+        # Load configuration files for the default server block.
+        include /etc/nginx/default.d/*.conf;
+
+        error_page 404 index.html;
+        #location = /404.html {
+        # }
+
+        #error_page 500 502 503 504 /50x.html;
+        #location = /50x.html {
+        #}
+    }
+
+
+
+# 配置后台接口
+vim /etc/nginx/conf.d/jk-im-com.conf
+
+    server {
+        listen       80;
+        server_name  127.0.0.1;
+        root   /work/bianyi/wwwroot/jk-im-com/public/;
+        index  index.php;
+
+        location / {
+            allow 127.0.0.1;
+            #deny all;
+            try_files $uri $uri/ /index.php?$query_string;
+        }
+
+        location ~ \.php$ {
+            fastcgi_index index.php;
+            fastcgi_pass   127.0.0.1:9001;
+            fastcgi_param  SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+            include fastcgi_params;
+            proxy_read_timeout 1800;
+            fastcgi_read_timeout 1800;
+        }
+
+#        error_page   500 502 503 504  /50x.html;
+#        location = /50x.html {
+#            root   html;
+#        }
+        access_log  /var/log/nginx/jk-im.access.log;
+        error_log /var/log/nginx/jk-im.error.log;
+
+    }
+
+
+
+4 关于 minio
+#当前默认的端口开放是 9000，和 php-fpm 的默认开放端口一致，二者改其一即可。#
+#修改配置文件 
+vim /etc/default/minio
+MINIO_ROOT_USER=minio
+MINIO_ROOT_PASSWORD=miniostorage
+
+systemctl restart minio
+
+# 创建桶
+curl https://dl.min.io/client/mc/release/linux-amd64/mc \
+  --create-dirs \
+  -o $HOME/minio-binaries/mc
+
+chmod +x $HOME/minio-binaries/mc
+export PATH=$PATH:$HOME/minio-binaries/
+
+mc --help
+mc alias set minio http://127.0.0.1:9000
+输入minio
+输入miniostorage
+mc mb minio/photos
+mc mb minio/encryptedfiles
+mc mb minio/documents
+
+
+二 关于应用的配置和安装
+1 后台 php 接口配置
+# 赋权
+chmod 777 storage
+
+#配置项目下的 .env 
+IM_HOST=http://127.0.0.1:40101/json
+#配置 redis 与 mysql 
+DB_CONNECTION=mysql_web_admin
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=enterprise
+DB_USERNAME=root
+DB_PASSWORD='8S$P4PPr*.Ym5MQq'
+
+DB_WEB_ADMIN_CONNECTION=mysql
+DB_WEB_ADMIN_HOST=127.0.0.1
+DB_WEB_ADMIN_PORT=3306
+DB_WEB_ADMIN_DATABASE=imweb
+DB_WEB_ADMIN_USERNAME=root
+DB_WEB_ADMIN_PASSWORD='8S$P4PPr*.Ym5MQq'
+
+REDIS_HOST=127.0.0.1
+REDIS_PASSWORD=null
+REDIS_PORT=6379
+
+
+
+2 Golang 配置的 im/configs 目录配置
+# 短信的 name 如果设为 "none" ，密码是 54321 
+[code]
+name = "smsbao"
+signed = "0"
+username = "0"
+password = "0"
+
+# 这里要根据实际部署的 php api 地址来确定
+[imapi]
+url = "http://127.0.0.1:80/imapi"
+
+# mysql 与 redis 的地址根据实际的部署来确定
+[redis]
+addr = "127.0.0.1:6379"
+[mysql]
+addr = "127.0.0.1:3306"
+dsn = "root:DYtbFb$o#cjYdjk2@tcp(127.0.0.1:3306)/enterprise?timeout=1s&readTimeout=1s&writeTimeout=1s&parseTime=true&loc=Local&charset=utf8mb4"
+
+# 根据 kafka 的实际地址来确定
+[clusters]
+[clusters.databus_kafka_9092-266]
+cluster = "databus_kafka_9092-266"
+brokers = ["127.0.0.1:9092"]
+
+
+# 配置启动脚本众 bin/run.sh，修改 
+MINIO_ENDPOINT=127.0.0.1:9000
+ETCD_ENDPOINTS=127.0.0.1:2379
+
+# 给 run.sh 赋权
+chmod +x bin/run.sh
+# 执行 golang 服务
+bin/run.sh
+
+# 如果想结束全部进程
+ps -ef | grep -E 'media|sync|gif|session|gateway|relay|wsserver|biz_server|auth_session|push|admin_log|botway|botfather|inbox|webpage|scheduled|api_server|msg'|grep -v grep | awk '{ print $2 }' | xargs kill -9
+
+
+三 排查问题日志
+golang 服务日志
+首先要排查 logs/gateway 日志， 具体业务排查 logs/biz_server, web 端服务要排查 logs/wsserver 
+nginx 日志 /var/log/nginx/
+laravel 业务日志 wwroot/jk.im.com/storage/logs
+
+
+

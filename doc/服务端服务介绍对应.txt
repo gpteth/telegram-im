@@ -1,0 +1,2 @@
+app/infra/databus分布式数据同步系统app/service/media媒体库app/service/auth_session golang用户微服务app/messenger/msg/inbox 电子邮件app/messenger/msg/msg 消息app/messenger/sync 同步服务app/messenger/push 推送服务app/messenger/webpage TCP连接web服务app/bots/botfather TG的bot服务app/bots/gif 动图app/job/admin_log 后台日志app/job/scheduled 多线程调度服务app/admin/api_server 接口服务app/interface/session golang微服务app/interface/gateway 通讯层服务app/interface/botway TG的bot服务app/interface/relay tcp服务app/interface/wsserver ws消息服务
+app/messenger/biz_server 控制层服务模块

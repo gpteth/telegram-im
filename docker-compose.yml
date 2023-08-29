@@ -1,0 +1,114 @@
+version: '3'
+services:
+  mysql_compose:
+    image: mysql:5.7
+    container_name: mysql_compose
+    ports:
+      - 3307:3306
+    volumes:
+      - /docker/mysql/data:/var/lib/mysql
+      - /docker/mysql/conf/mysqld.cnf:/etc/mysql/mysql.conf.d/mysqld.cnf
+    environment:
+      MYSQL_ROOT_PASSWORD: "8S$P4PPr*.Ym5MQq"
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  broker:
+    image: confluentinc/cp-kafka:7.3.0
+    container_name: broker
+    ports:
+      # To learn about configuring Kafka for access across networks see
+      # https://www.confluent.io/blog/kafka-client-cannot-connect-to-broker-on-aws-on-docker-etc/
+      - "9092:9092"
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://broker:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+  redis:
+    image: redis:6.2-alpine
+    ports:
+      - 6379:6379
+    command: redis-server --save 60 1 --requirepass MDNcVb924a --loglevel warning
+
+  etcd1:
+    # etcd uses gcr.io/etcd-development/etcd as a primary container registry, and quay.io/coreos/etcd as secondary.
+    image: quay.io/coreos/etcd:v3.5.1  # 镜像
+    container_name: etcd1       # 容器名 --name
+    restart: always             # 总是重启
+    networks:
+      - etcd-net                # 使用的网络 --network
+    ports:                      # 端口映射 -p
+      - "20000:2379"
+      - "20001:2380"
+    environment:                # 环境变量 --env
+      - ALLOW_NONE_AUTHENTICATION=yes                       # 允许不用密码登录
+      - ETCD_NAME=etcd1                                     # etcd 的名字
+      - ETCD_INITIAL_ADVERTISE_PEER_URLS=http://etcd1:2380  # 列出这个成员的伙伴 URL 以便通告给集群的其他成员
+      - ETCD_LISTEN_PEER_URLS=http://0.0.0.0:2380           # 用于监听伙伴通讯的URL列表
+      - ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379         # 用于监听客户端通讯的URL列表
+      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd1:2379        # 列出这个成员的客户端URL，通告给集群中的其他成员
+      - ETCD_INITIAL_CLUSTER_TOKEN=etcd-cluster             # 在启动期间用于 etcd 集群的初始化集群记号
+      - ETCD_INITIAL_CLUSTER=etcd1=http://etcd1:2380,etcd2=http://etcd2:2380        # 为启动初始化集群配置
+      - ETCD_INITIAL_CLUSTER_STATE=new                      # 初始化集群状态
+      - ETCDCTL_API=3                                       # 升级api版本，使用最新的v3 API
+    volumes:
+      - $PWD/etcd1_data:/etcd-data                       # 挂载的数据卷
+      - /etc/localtime:/etc/localtime
+
+  etcd2:
+    image: quay.io/coreos/etcd:v3.5.1
+    container_name: etcd2
+    restart: always
+    networks:
+      - etcd-net
+    ports:
+      - "20002:2379"
+      - "20003:2380"
+    environment:
+      - ALLOW_NONE_AUTHENTICATION=yes
+      - ETCD_NAME=etcd2
+      - ETCD_INITIAL_ADVERTISE_PEER_URLS=http://etcd2:2380
+      - ETCD_LISTEN_PEER_URLS=http://0.0.0.0:2380
+      - ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
+      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd2:2379
+      - ETCD_INITIAL_CLUSTER_TOKEN=etcd-cluster
+      - ETCD_INITIAL_CLUSTER=etcd1=http://etcd1:2380,etcd2=http://etcd2:2380
+      - ETCD_INITIAL_CLUSTER_STATE=new
+      - ETCDCTL_API=3
+    volumes:
+      - $PWD/etcd2_data:/etcd-data
+      - /etc/localtime:/etc/localtime
+
+    minio:
+      image: 'minio/minio:latest'
+      ports:
+        - '9000:9000'
+        - '8900:8900'
+      environment:
+        MINIO_ROOT_USER: 'minio'
+        MINIO_ROOT_PASSWORD: 'miniostorage'
+      volumes:
+        - '/data/data:/data/minio'
+      networks:
+        - sail
+      command: minio server /data/minio --console-address ":8900"
+      healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+        retries: 3
+        timeout: 5s
+
+networks:
+  etcd-net:           # 网络
+    driver: bridge    # 桥接模式

@@ -1,0 +1,166 @@
+放行端口
+81,10443,10444,12443,15222,18801,80,443,7800
+开启防火墙
+systemctl start firewalld
+
+firewall-cmd --permanent --zone=public --add-port=81/tcp
+firewall-cmd --permanent --zone=public --add-port=10443/tcp
+firewall-cmd --permanent --zone=public --add-port=10444/tcp
+firewall-cmd --permanent --zone=public --add-port=12443/tcp
+firewall-cmd --permanent --zone=public --add-port=15222/tcp
+firewall-cmd --permanent --zone=public --add-port=18801/tcp
+firewall-cmd --permanent --zone=public --add-port=80/tcp
+firewall-cmd --permanent --zone=public --add-port=443/tcp
+firewall-cmd --permanent --zone=public --add-port=7800/tcp
+
+安装宝塔
+yum install -y wget && wget -O install.sh http://download.bt.cn/install/install_6.0.sh && sh install.sh ed8484bec
+卸载宝塔
+wget http://download.bt.cn/install/bt-uninstall.sh
+sh bt-uninstall.sh
+
+mysql安装：
+输入命令:
+yum install https://dev.mysql.com/get/mysql80-community-release-el7-7.noarch.rpm -y
+vim /etc/yum.repos.d/mysql-community.repo
+按下i或者a键,进入编辑模式
+将5.7的enabled=1,   8.0的enabled=0,具体位置如外图mysql-config所示,将图中两个位置的数字对换即可
+按一下esc键进入控制模式
+输入冒号wq回车即可保存  (:wq)
+完成后输入命令:
+yum install mysql-server -y
+systemctl start mysqld
+systemctl enable mysqld
+cat /var/log/mysqld.log | grep password
+找到默认密码,具体位置如外图mysql默认密码所示
+复制密码,输入下面命令
+mysql -u root -p
+然后粘贴刚才复制的密码,此处不会显示出密码,直接回车即可，
+在输入下面的命令
+ALTER USER 'root'@'localhost' IDENTIFIED BY 'DYtbFb$o#cjYdjk2';
+
+EXIT
+
+minio安装:
+输入命令:
+wget https://dl.min.io/server/minio/release/linux-amd64/archive/minio-20221008201100.0.0.x86_64.rpm
+rpm -ivh minio-20221008201100.0.0.x86_64.rpm
+groupadd -r minio-user
+useradd -M -r -g minio-user minio-user
+mkdir -p /data/{disk1,disk2,data}
+chown minio-user:minio-user /data -R
+vim /etc/default/minio
+同上输入i或者a进入编辑模式
+复制以下内容粘贴进去
+
+# MINIO_ROOT_USER and MINIO_ROOT_PASSWORD sets the root account for the MinIO server.
+# This user has unrestricted permissions to perform S3 and administrative API operations on any resource in the deployment.
+# Omit to use the default values 'minioadmin:minioadmin'.
+# MinIO recommends setting non-default values as a best practice, regardless of environment
+
+MINIO_ROOT_USER=mimio
+MINIO_ROOT_PASSWORD=Minio1234!
+
+# MINIO_VOLUMES sets the storage volume or path to use for the MinIO server.
+
+MINIO_VOLUMES="/data/data"
+
+# MINIO_SERVER_URL sets the hostname of the local machine for use with the MinIO Server
+# MinIO assumes your network control plane can correctly resolve this hostname to the local machine
+
+# Uncomment the following line and replace the value with the correct hostname for the local machine.
+
+#MINIO_SERVER_URL="http://minio.example.net"
+
+按一下esc键进入控制模式
+输入冒号wq回车即可保存  (:wq)
+systemctl start minio
+systemctl enable minio
+
+redis在宝塔上安装即可
+命令行安装输入命令:
+yum install systemd-devel gcc
+wget https://download.redis.io/releases/redis-6.2.7.tar.gz
+tar -zxvf redis-6.2.7.tar.gz
+
+cd redis-6.2.7/
+make
+make install
+
+cd /usr/local
+mkdir redis
+
+cd redis
+vim 6379.conf
+同上输入i或者a进入编辑模式
+复制以下内容粘贴进去
+
+bind 0.0.0.0
+port 6379
+protected-mode yes
+daemonize yes
+pidfile /run/redis-6379.pid
+save 3600 1
+save 300 100
+save 60 10000
+dbfilename "dump.db"
+dir data
+logfile logs/redis.log
+appendonly yes
+appendfilename "appendonly.aof"
+appendfsync everysec
+
+按一下esc键进入控制模式
+输入冒号wq回车即可保存  (:wq)
+mkdir data
+cd data
+mkdir logs
+cd logs
+touch redis.log
+cd ../..
+redis-server 6379.conf
+cd回到原来安装目录
+
+etcd安装:
+wget https://github.com/etcd-io/etcd/releases/download/v3.5.5/etcd-v3.5.5-linux-amd64.tar.gz
+tar -zxvf etcd-v3.5.5-linux-amd64.tar.gz
+cd etcd-v3.5.5-linux-amd64/
+nohup ./etcd > etcd.log 2>&1 &
+
+ssdb安装:
+yum install autoconf gcc-c++ -y
+wget https://github.com/ideawu/ssdb/archive/master.zip
+unzip安装 : yum -y install unzip zip
+unzip master
+cd ssdb-master
+make
+make install
+cd /usr/local/ssdb
+./ssdb-server -d ssdb.conf
+
+
+java1.8安装:
+yum install java-1.8.0-openjdk
+yum -y list java* 
+vim /etc/profile
+末尾追加
+export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.352.b08-2.el7_9.x86_64/jre/
+export PATH=$PATH:$JAVA_HOME/bin
+保存
+source /etc/profile
+
+zookeeper+kafka:
+wget https://downloads.apache.org/kafka/3.3.1/kafka_2.13-3.3.1.tgz
+tar -zxvf kafka_2.13-3.3.1.tgz 
+cd kafka_2.13-3.3.1/
+nohup bin/zookeeper-server-start.sh config/zookeeper.properties > zookeeper.log 2>&1 &
+nohup bin/kafka-server-start.sh config/server.properties > kafka.log 2>&1 &
+
+ffmpeg:
+直接安装
+yum -y install http://li.nux.ro/download/nux/dextop/el7/x86_64/nux-dextop-release-0-5.el7.nux.noarch.rpm
+yum install ffmpeg -y
+
+查看服务启动情况：
+ps -ef | grep configs
+
